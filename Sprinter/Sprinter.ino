@@ -61,13 +61,8 @@ bool move_direction[NUM_AXIS];
 unsigned long axis_previous_micros[NUM_AXIS];
 unsigned long previous_micros = 0, previous_millis_heater, previous_millis_bed_heater;
 unsigned long move_steps_to_take[NUM_AXIS];
-#ifdef RAMP_ACCELERATION
-unsigned long axis_max_interval[NUM_AXIS];
-unsigned long axis_steps_per_sqr_second[NUM_AXIS];
-unsigned long axis_travel_steps_per_sqr_second[NUM_AXIS];
-unsigned long max_interval;
-unsigned long steps_per_sqr_second, plateau_steps;  
-#endif
+
+
 boolean acceleration_enabled = false, accelerating = false;
 unsigned long interval;
 float destination[NUM_AXIS] = {0.0, 0.0, 0.0, 0.0};
@@ -103,44 +98,6 @@ int serial_count = 0;
 boolean comment_mode = false;
 char *strchr_pointer; // just a pointer to find chars in the cmd string like X, Y, Z, E, etc
 
-// Manage heater variables. For a thermistor or AD595 thermocouple, raw values refer to the 
-// reading from the analog pin. For a MAX6675 thermocouple, the raw value is the temperature in 0.25 
-// degree increments (i.e. 100=25 deg). 
-
-int target_raw = 0;
-int target_temp = 0;
-int current_raw = 0;
-int target_bed_raw = 0;
-int current_bed_raw = 0;
-int tt = 0, bt = 0;
-#ifdef PIDTEMP
-  int temp_iState = 0;
-  int prev_temp = 0;
-  int pTerm;
-  int iTerm;
-  int dTerm;
-      //int output;
-  int error;
-  int heater_duty = 0;
-  const int temp_iState_min = 256L * -PID_INTEGRAL_DRIVE_MAX / PID_IGAIN;
-  const int temp_iState_max = 256L * PID_INTEGRAL_DRIVE_MAX / PID_IGAIN;
-#endif
-#ifndef HEATER_CURRENT
-  #define HEATER_CURRENT 255
-#endif
-#ifdef SMOOTHING
-  uint32_t nma = 0;
-#endif
-#ifdef WATCHPERIOD
-  int watch_raw = -1000;
-  unsigned long watchmillis = 0;
-#endif
-#ifdef MINTEMP
-  int minttemp = temp2analogh(MINTEMP);
-#endif
-#ifdef MAXTEMP
-int maxttemp = temp2analogh(MAXTEMP);
-#endif
         
 //Inactivity shutdown variables
 unsigned long previous_millis_cmd = 0;
@@ -152,10 +109,6 @@ void setup()
 { 
   Serial.begin(BAUDRATE);
   Serial.println("start");
-  for(int i = 0; i < BUFSIZE; i++){
-      fromsd[i] = false;
-  }
-
   
   //Initialize Dir Pins
 /*  #if X_DIR_PIN > -1
@@ -455,94 +408,7 @@ inline void process_commands()
         }
         break;
       case 28: //G28 Home all Axis one at a time
-        saved_feedrate = feedrate;
-        for(int i=0; i < NUM_AXIS; i++) {
-          destination[i] = current_position[i];
-        }
-        feedrate = 0;
-
-        home_all_axis = !((code_seen(axis_codes[0])) || (code_seen(axis_codes[1])) || (code_seen(axis_codes[2])));
-
-/*        if((home_all_axis) || (code_seen(axis_codes[0]))) {
-          if ((X_MIN_PIN > -1 && X_HOME_DIR==-1) || (X_MAX_PIN > -1 && X_HOME_DIR==1)){
-            current_position[0] = -1.5 * X_MAX_LENGTH * X_HOME_DIR;
-            destination[0] = 0;
-            feedrate = homing_feedrate[0];
-            prepare_move();
-          
-            current_position[0] = 5 * X_HOME_DIR;
-            destination[0] = 0;
-            prepare_move();
-          
-            current_position[0] = -10 * X_HOME_DIR;
-            destination[0] = 0;
-            prepare_move();
-          
-            current_position[0] = (X_HOME_DIR == -1) ? 0 : X_MAX_LENGTH;
-            destination[0] = current_position[0];
-            feedrate = 0;
-          }
-        }
-        
-        if((home_all_axis) || (code_seen(axis_codes[1]))) {
-          if ((Y_MIN_PIN > -1 && Y_HOME_DIR==-1) || (Y_MAX_PIN > -1 && Y_HOME_DIR==1)){
-            current_position[1] = -1.5 * Y_MAX_LENGTH * Y_HOME_DIR;
-            destination[1] = 0;
-
-            feedrate = homing_feedrate[1];
-            prepare_move();
-          
-            current_position[1] = 5 * Y_HOME_DIR;
-            destination[1] = 0;
-            prepare_move();
-          
-            current_position[1] = -10 * Y_HOME_DIR;
-            destination[1] = 0;
-            prepare_move();
-          
-            current_position[1] = (Y_HOME_DIR == -1) ? 0 : Y_MAX_LENGTH;
-            destination[1] = current_position[1];
-            feedrate = 0;
-          }
-        }
-  */      
-        if((home_all_axis) || (code_seen(axis_codes[2]))) {
-          if ((Z_MIN_PIN > -1 && Z_HOME_DIR==-1) || (Z_MAX_PIN > -1 && Z_HOME_DIR==1)){
-            current_position[2] = -1.5 * Z_MAX_LENGTH * Z_HOME_DIR;
-            destination[2] = 0;
-            feedrate = homing_feedrate[2];
-            prepare_move();
-          
-            current_position[2] = 2 * Z_HOME_DIR;
-            destination[2] = 0;
-            prepare_move();
-          
-            current_position[2] = -5 * Z_HOME_DIR;
-            destination[2] = 0;
-            prepare_move();
-          
-            current_position[2] = (Z_HOME_DIR == -1) ? 0 : Z_MAX_LENGTH;
-            destination[2] = current_position[2];
-            feedrate = 0;
-          
-        }
-        }
-        
-        feedrate = saved_feedrate;
-        previous_millis_cmd = millis();
-        break;
-      case 90: // G90
-        relative_mode = false;
-        break;
-      case 91: // G91
-        relative_mode = true;
-        break;
-      case 92: // G92
-        for(int i=0; i < NUM_AXIS; i++) {
-          if(code_seen(axis_codes[i])) current_position[i] = code_value();  
-        }
-        break;
-        
+        break;        
     }
   }
 
@@ -558,15 +424,6 @@ inline void process_commands()
           if (code_seen('P') && pin_status >= 0 && pin_status <= 255)
           {
             int pin_number = code_value();
-            for(int i = 0; i < sizeof(sensitive_pins); i++)
-            {
-              if (sensitive_pins[i] == pin_number)
-              {
-                pin_number = -1;
-                break;
-              }
-            }
-            
             if (pin_number > -1)
             {              
               pinMode(pin_number, OUTPUT);
@@ -577,109 +434,14 @@ inline void process_commands()
         }
         break;
       case 104: // M104
-        if (code_seen('S')) target_raw = temp2analogh(target_temp = code_value());
-        #ifdef WATCHPERIOD
-            if(target_raw > current_raw){
-                watchmillis = max(1,millis());
-                watch_raw = current_raw;
-            }else{
-                watchmillis = 0;
-            }
-        #endif
         break;
       case 140: // M140 set bed temp
-        #if TEMP_1_PIN > -1 || defined BED_USES_AD595
-            if (code_seen('S')) target_bed_raw = temp2analogBed(code_value());
-        #endif
         break;
       case 105: // M105
-        #if (TEMP_0_PIN > -1) || defined (HEATER_USES_MAX6675)|| defined HEATER_USES_AD595
-          tt = analog2temp(current_raw);
-        #endif
-        #if TEMP_1_PIN > -1 || defined BED_USES_AD595
-          bt = analog2tempBed(current_bed_raw);
-        #endif
-        #if (TEMP_0_PIN > -1) || defined (HEATER_USES_MAX6675) || defined HEATER_USES_AD595
-            Serial.print("ok T:");
-            Serial.print(tt); 
-          #ifdef PIDTEMP
-            Serial.print(" @:");
-            Serial.print(heater_duty); 
-            Serial.print(",");
-            Serial.print(iTerm);
-          #endif
-          #if TEMP_1_PIN > -1 || defined BED_USES_AD595
-            Serial.print(" B:");
-            Serial.println(bt); 
-          #else
-            Serial.println();
-          #endif
-        #else
-          #error No temperature source available
-        #endif
-        return;
-        //break;
+        break;
       case 109: { // M109 - Wait for extruder heater to reach target.
-        if (code_seen('S')) target_raw = temp2analogh(target_temp = code_value());
-        #ifdef WATCHPERIOD
-            if(target_raw>current_raw){
-                watchmillis = max(1,millis());
-                watch_raw = current_raw;
-            }else{
-                watchmillis = 0;
-            }
-        #endif
-        codenum = millis(); 
-        
-        /* See if we are heating up or cooling down */
-        bool target_direction = (current_raw < target_raw);  // true if heating, false if cooling
-        
-      #ifdef TEMP_RESIDENCY_TIME
-        long residencyStart;
-        residencyStart = -1;
-        /* continue to loop until we have reached the target temp   
-           _and_ until TEMP_RESIDENCY_TIME hasn't passed since we reached it */
-        while( (target_direction ? (current_raw < target_raw) : (current_raw > target_raw))
-            || (residencyStart > -1 && (millis() - residencyStart) < TEMP_RESIDENCY_TIME*1000) ) {
-      #else
-        while ( target_direction ? (current_raw < target_raw) : (current_raw > target_raw) ) {
-      #endif
-          if( (millis() - codenum) > 1000 ) //Print Temp Reading every 1 second while heating up/cooling down
-          {
-            Serial.print("T:");
-            Serial.println( analog2temp(current_raw) );
-            codenum = millis();
-          }
-          manage_heater();
-          #ifdef TEMP_RESIDENCY_TIME
-            /* start/restart the TEMP_RESIDENCY_TIME timer whenever we reach target temp for the first time
-               or when current temp falls outside the hysteresis after target temp was reached */
-            if (   (residencyStart == -1 &&  target_direction && current_raw >= target_raw)
-                || (residencyStart == -1 && !target_direction && current_raw <= target_raw)
-                || (residencyStart > -1 && labs(analog2temp(current_raw) - analog2temp(target_raw)) > TEMP_HYSTERESIS) ) {
-              residencyStart = millis();
-            }
-          #endif
-	    }
-      }
       break;
       case 190: // M190 - Wait bed for heater to reach target.
-      #if TEMP_1_PIN > -1
-        if (code_seen('S')) target_bed_raw = temp2analogh(code_value());
-        codenum = millis(); 
-        while(current_bed_raw < target_bed_raw) {
-          if( (millis()-codenum) > 1000 ) //Print Temp Reading every 1 second while heating up.
-          {
-            tt=analog2temp(current_raw);
-            Serial.print("T:");
-            Serial.print( tt );
-            Serial.print(" B:");
-            Serial.println( analog2temp(current_bed_raw) ); 
-            codenum = millis(); 
-          }
-            manage_heater();
-        }
-      #endif
       break;
       #if FAN_PIN > -1
       case 106: //M106 Fan On
@@ -697,93 +459,20 @@ inline void process_commands()
           WRITE(FAN_PIN, LOW);
         break;
       #endif
-      #if (PS_ON_PIN > -1)
-      case 80: // M81 - ATX Power On
-        SET_OUTPUT(PS_ON_PIN); //GND
-        break;
-      case 81: // M81 - ATX Power Off
-        SET_INPUT(PS_ON_PIN); //Floating
-        break;
-      #endif
-      case 82:
-        axis_relative_modes[3] = false;
-        break;
-      case 83:
-        axis_relative_modes[3] = true;
-        break;
       case 84:
-        if(code_seen('S')){ stepper_inactive_time = code_value() * 1000; }
-        else{ /*disable_x(); disable_y();*/ disable_z(); /*disable_e();*/ }
         break;
       case 85: // M85
-        code_seen('S');
-        max_inactive_time = code_value() * 1000; 
         break;
       case 92: // M92
-        for(int i=0; i < NUM_AXIS; i++) {
-          if(code_seen(axis_codes[i])) axis_steps_per_unit[i] = code_value();
-        }
-        
-        #ifdef RAMP_ACCELERATION
-          setup_acceleration();
-        #endif
-        
         break;
       case 115: // M115
-        Serial.print("FIRMWARE_NAME:Sprinter FIRMWARE_URL:http%%3A/github.com/kliment/Sprinter/ PROTOCOL_VERSION:1.0 MACHINE_TYPE:Mendel EXTRUDER_COUNT:1 UUID:");
-        Serial.println(uuid);
+//        Serial.print("FIRMWARE_NAME:Sprinter FIRMWARE_URL:http%%3A/github.com/kliment/Sprinter/ PROTOCOL_VERSION:1.0 MACHINE_TYPE:Mendel EXTRUDER_COUNT:1 UUID:");
+//        Serial.println(uuid);
         break;
       case 114: // M114
-	Serial.print("X:");
-        Serial.print(current_position[0]);
-	Serial.print("Y:");
-        Serial.print(current_position[1]);
-	Serial.print("Z:");
-        Serial.print(current_position[2]);
-	Serial.print("E:");
-        Serial.println(current_position[3]);
         break;
       case 119: // M119
-/*      	#if (X_MIN_PIN > -1)
-      	Serial.print("x_min:");
-        Serial.print((READ(X_MIN_PIN)^X_ENDSTOP_INVERT)?"H ":"L ");
-      	#endif
-      	#if (X_MAX_PIN > -1)
-      	Serial.print("x_max:");
-        Serial.print((READ(X_MAX_PIN)^X_ENDSTOP_INVERT)?"H ":"L ");
-      	#endif
-      	#if (Y_MIN_PIN > -1)
-      	Serial.print("y_min:");
-        Serial.print((READ(Y_MIN_PIN)^Y_ENDSTOP_INVERT)?"H ":"L ");
-      	#endif
-      	#if (Y_MAX_PIN > -1)
-      	Serial.print("y_max:");
-        Serial.print((READ(Y_MAX_PIN)^Y_ENDSTOP_INVERT)?"H ":"L ");
-      	#endif
-*/
-      	#if (Z_MIN_PIN > -1)
-      	Serial.print("z_min:");
-        Serial.print((READ(Z_MIN_PIN)^Z_ENDSTOP_INVERT)?"H ":"L ");
-      	#endif
-      	#if (Z_MAX_PIN > -1)
-      	Serial.print("z_max:");
-        Serial.print((READ(Z_MAX_PIN)^Z_ENDSTOP_INVERT)?"H ":"L ");
-      	#endif
-        Serial.println("");
       	break;
-      #ifdef RAMP_ACCELERATION
-      //TODO: update for all axis, use for loop
-      case 201: // M201
-        for(int i=0; i < NUM_AXIS; i++) {
-          if(code_seen(axis_codes[i])) axis_steps_per_sqr_second[i] = code_value() * axis_steps_per_unit[i];
-        }
-        break;
-      case 202: // M202
-        for(int i=0; i < NUM_AXIS; i++) {
-          if(code_seen(axis_codes[i])) axis_travel_steps_per_sqr_second[i] = code_value() * axis_steps_per_unit[i];
-        }
-        break;
-      #endif
     }
     
   }
@@ -874,11 +563,7 @@ void prepare_move()
   else{ //zero length move
 */
   if(d==0){
-  #ifdef DEBUG_PREPARE_MOVE
-    
-      log_message("_PREPARE_MOVE - No steps to take!");
-    
-  #endif
+
     return;
     }
   time_for_move = (d / (feedrate / 60000000.0) );
@@ -892,17 +577,7 @@ void prepare_move()
   for(int i=0; i < NUM_AXIS; i++) {
     if(move_steps_to_take[i]) axis_interval[i] = time_for_move / move_steps_to_take[i] * 100;
   }
-  
-  #ifdef DEBUG_PREPARE_MOVE
-    log_float("_PREPARE_MOVE - Move distance on the XY plane", xy_d);
-    log_float("_PREPARE_MOVE - Move distance on the XYZ space", d);
-    log_int("_PREPARE_MOVE - Commanded feedrate", feedrate);
-    log_float("_PREPARE_MOVE - Constant full speed move time", time_for_move);
-    log_float_array("_PREPARE_MOVE - Destination", destination, NUM_AXIS);
-    log_float_array("_PREPARE_MOVE - Current position", current_position, NUM_AXIS);
-    log_ulong_array("_PREPARE_MOVE - Steps to take", move_steps_to_take, NUM_AXIS);
-    log_long_array("_PREPARE_MOVE - Axes full speed intervals", axis_interval, NUM_AXIS);
-  #endif
+
 
   unsigned long move_steps[NUM_AXIS];
   for(int i=0; i < NUM_AXIS; i++)

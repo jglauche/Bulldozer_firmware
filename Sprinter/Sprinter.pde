@@ -6,10 +6,6 @@
 #include "pins.h"
 #include "Sprinter.h"
 
-#ifdef SDSUPPORT
-#include "SdFat.h"
-#endif
-
 // look here for descriptions of gcodes: http://linuxcnc.org/handbook/gcode/g-code.html
 // http://objects.reprap.org/wiki/Mendel_User_Manual:_RepRapGCodes
 
@@ -150,66 +146,6 @@ int maxttemp = temp2analogh(MAXTEMP);
 unsigned long previous_millis_cmd = 0;
 unsigned long max_inactive_time = 0;
 unsigned long stepper_inactive_time = 0;
-
-#ifdef SDSUPPORT
-  Sd2Card card;
-  SdVolume volume;
-  SdFile root;
-  SdFile file;
-  uint32_t filesize = 0;
-  uint32_t sdpos = 0;
-  bool sdmode = false;
-  bool sdactive = false;
-  bool savetosd = false;
-  int16_t n;
-  
-  void initsd(){
-  sdactive = false;
-  #if SDSS >- 1
-    if(root.isOpen())
-        root.close();
-    if (!card.init(SPI_FULL_SPEED,SDSS)){
-        //if (!card.init(SPI_HALF_SPEED,SDSS))
-          Serial.println("SD init fail");
-    }
-    else if (!volume.init(&card))
-          Serial.println("volume.init failed");
-    else if (!root.openRoot(&volume)) 
-          Serial.println("openRoot failed");
-    else{
-          sdactive = true;
-          #ifdef SDINITFILE
-            file.close();
-            if(file.open(&root, "init.g", O_READ)){
-                sdpos = 0;
-                filesize = file.fileSize();
-                sdmode = true;
-            }
-          #endif
-    }
-  #endif
-  }
-  
-  inline void write_command(char *buf){
-      char* begin = buf;
-      char* npos = 0;
-      char* end = buf + strlen(buf) - 1;
-      
-      file.writeError = false;
-      if((npos = strchr(buf, 'N')) != NULL){
-          begin = strchr(npos, ' ') + 1;
-          end = strchr(npos, '*') - 1;
-      }
-      end[1] = '\r';
-      end[2] = '\n';
-      end[3] = '\0';
-      //Serial.println(begin);
-      file.write(begin);
-      if (file.writeError){
-          Serial.println("error writing to file");
-      }
-  }
-#endif
 
 
 void setup()
@@ -368,16 +304,6 @@ void setup()
   WRITE(MAX6675_SS,1);
 #endif  
  
-#ifdef SDSUPPORT
-
-  //power to SD reader
-  #if SDPOWER > -1
-    SET_OUTPUT(SDPOWER); 
-    WRITE(SDPOWER,HIGH);
-  #endif
-  initsd();
-
-#endif
 
 }
 
@@ -388,23 +314,7 @@ void loop()
 	get_command();
   
   if(buflen){
-#ifdef SDSUPPORT
-    if(savetosd){
-        if(strstr(cmdbuffer[bufindr],"M29") == NULL){
-            write_command(cmdbuffer[bufindr]);
-            Serial.println("ok");
-        }else{
-            file.sync();
-            file.close();
-            savetosd = false;
-            Serial.println("Done saving file.");
-        }
-    }else{
-        process_commands();
-    }
-#else
     process_commands();
-#endif
     buflen = (buflen-1);
     bufindr = (bufindr + 1)%BUFSIZE;
     }
@@ -482,10 +392,6 @@ inline void get_command()
 		switch((int)((strtod(&cmdbuffer[bufindw][strchr_pointer - cmdbuffer[bufindw] + 1], NULL)))){
 		case 0:
 		case 1:
-              #ifdef SDSUPPORT
-              if(savetosd)
-                break;
-              #endif
 			  Serial.println("ok"); 
 			  break;
 		default:
@@ -505,37 +411,6 @@ inline void get_command()
       if(!comment_mode) cmdbuffer[bufindw][serial_count++] = serial_char;
     }
   }
-#ifdef SDSUPPORT
-if(!sdmode || serial_count!=0){
-    return;
-}
-  while( filesize > sdpos  && buflen < BUFSIZE) {
-    n = file.read();
-    serial_char = (char)n;
-    if(serial_char == '\n' || serial_char == '\r' || serial_char == ':' || serial_count >= (MAX_CMD_SIZE - 1) || n == -1) 
-    {
-        sdpos = file.curPosition();
-        if(sdpos >= filesize){
-            sdmode = false;
-            Serial.println("Done printing file");
-        }
-      if(!serial_count) return; //if empty line
-      cmdbuffer[bufindw][serial_count] = 0; //terminate string
-      if(!comment_mode){
-        fromsd[bufindw] = true;
-        buflen += 1;
-        bufindw = (bufindw + 1)%BUFSIZE;
-      }
-      comment_mode = false; //for new command
-      serial_count = 0; //clear buffer
-    }
-    else
-    {
-      if(serial_char == ';') comment_mode = true;
-      if(!comment_mode) cmdbuffer[bufindw][serial_count++] = serial_char;
-    }
-}
-#endif
 
 }
 
@@ -676,96 +551,6 @@ inline void process_commands()
     
     switch( (int)code_value() ) 
     {
-#ifdef SDSUPPORT
-        
-      case 20: // M20 - list SD card
-        Serial.println("Begin file list");
-        root.ls();
-        Serial.println("End file list");
-        break;
-      case 21: // M21 - init SD card
-        sdmode = false;
-        initsd();
-        break;
-      case 22: //M22 - release SD card
-        sdmode = false;
-        sdactive = false;
-        break;
-      case 23: //M23 - Select file
-        if(sdactive){
-            sdmode = false;
-            file.close();
-            starpos = (strchr(strchr_pointer + 4,'*'));
-            if(starpos!=NULL)
-                *(starpos-1)='\0';
-            if (file.open(&root, strchr_pointer + 4, O_READ)) {
-                Serial.print("File opened:");
-                Serial.print(strchr_pointer + 4);
-                Serial.print(" Size:");
-                Serial.println(file.fileSize());
-                sdpos = 0;
-                filesize = file.fileSize();
-                Serial.println("File selected");
-            }
-            else{
-                Serial.println("file.open failed");
-            }
-        }
-        break;
-      case 24: //M24 - Start SD print
-        if(sdactive){
-            sdmode = true;
-        }
-        break;
-      case 25: //M25 - Pause SD print
-        if(sdmode){
-            sdmode = false;
-        }
-        break;
-      case 26: //M26 - Set SD index
-        if(sdactive && code_seen('S')){
-            sdpos = code_value_long();
-            file.seekSet(sdpos);
-        }
-        break;
-      case 27: //M27 - Get SD status
-        if(sdactive){
-            Serial.print("SD printing byte ");
-            Serial.print(sdpos);
-            Serial.print("/");
-            Serial.println(filesize);
-        }else{
-            Serial.println("Not SD printing");
-        }
-        break;
-            case 28: //M28 - Start SD write
-        if(sdactive){
-          char* npos = 0;
-            file.close();
-            sdmode = false;
-            starpos = (strchr(strchr_pointer + 4,'*'));
-            if(starpos != NULL){
-              npos = strchr(cmdbuffer[bufindr], 'N');
-              strchr_pointer = strchr(npos,' ') + 1;
-              *(starpos-1) = '\0';
-            }
-      if (!file.open(&root, strchr_pointer+4, O_CREAT | O_APPEND | O_WRITE | O_TRUNC))
-            {
-            Serial.print("open failed, File: ");
-            Serial.print(strchr_pointer + 4);
-            Serial.print(".");
-            }else{
-            savetosd = true;
-            Serial.print("Writing to file: ");
-            Serial.println(strchr_pointer + 4);
-            }
-        }
-        break;
-      case 29: //M29 - Stop SD write
-        //processed in write to file routine above
-        //savetosd = false;
-        break;
-#endif
       case 42: //M42 -Change pin status via gcode
         if (code_seen('S'))
         {
@@ -1023,10 +808,6 @@ void FlushSerialRequestResend()
 void ClearToSend()
 {
   previous_millis_cmd = millis();
-  #ifdef SDSUPPORT
-  if(fromsd[bufindr])
-    return;
-  #endif
   Serial.println("ok"); 
 }
 
